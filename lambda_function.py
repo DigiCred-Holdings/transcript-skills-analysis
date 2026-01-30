@@ -58,22 +58,33 @@ def get_highest_count_skill(course_skill_data):
             if id not in skill_id_count:
                 skill_id_count[id] = {
                     "count": 1,
+                    "max_skill_level": skill["skill_level"],
+                    "sum_skill_level": skill["skill_level"],
                     "skill": skill,
                     "course_code": [course["code"]]
                 }
             else:
                 skill_id_count[id]["count"] += 1
+                if skill["skill_level"] > skill_id_count[id]["max_skill_level"]: 
+                    skill_id_count[id]["max_skill_level"] = skill["skill_level"]
+                skill_id_count[id]["sum_skill_level"] += skill["skill_level"]
                 skill_id_count[id]["course_code"].append(course["code"])
-    
-    print(skill_id_count)
+
     max_count_skill = None
     max_count = 0
+    max_level_skill = None
+    max_skill_sum = 0
     for skill_id, skill_data in skill_id_count.items():
         if skill_data["count"] > max_count:
             max_count_skill = skill_data
             max_count = skill_data["count"]
+        
+        if skill_data["sum_skill_level"] > max_skill_sum:
+            max_level_skill = skill_data
+            max_skill_sum = skill_data["sum_skill_level"]
+        
 
-    return max_count_skill
+    return max_count_skill, max_level_skill
         
 
 def invoke_bedrock_model(messages: list[dict[str, str]]):
