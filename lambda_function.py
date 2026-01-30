@@ -33,7 +33,7 @@ def find_relevant_courses(course_title_code_list, all_courses):
         if len(candidates) == 1:
             found_student_courses.append(candidates[0])
         elif len(candidates):
-            print("Multiple candidates for course were found in the registry for code", given_code, given_title)
+            print(f"{len(candidates)} candidates for course were found in the registry for code", given_code, given_title)
             print(", ".join([course["code"] + ": " + course["name"] for course in candidates]))
             missing_codes.append([given_title, given_code])
         else:
@@ -50,6 +50,29 @@ def get_course_data(course_title_code_list):
     course_skill_data = find_relevant_courses(course_title_code_list, all_courses)    
     return course_skill_data
 
+def get_highest_count_skill(course_skill_data):
+    skill_id_count = {}
+    for course in course_skill_data:
+        for skill in course["skill_curated"]:
+            if skill["skill_id"] not in skill_id_count:
+                skill_id_count["skill_id"] = {
+                    "count": 1,
+                    "skill": skill,
+                    "course_code": [course["code"]]
+                }
+            else:
+                skill_id_count["skill_id"]["count"] += 1
+                skill_id_count["skill_id"]["course_code"].append(course["code"])
+    
+    max_count_skill = None
+    max_count = 0
+    for skill_id, skill_data in skill_id_count.items():
+        if skill_data["count"] > max_count:
+            max_count_skill = skill_data
+            max_count = skill_data["count"]
+
+    return max_count_skill
+        
 
 def invoke_bedrock_model(messages: list[dict[str, str]]):
     client = boto3.client("bedrock-runtime")
@@ -182,6 +205,9 @@ def lambda_handler(event, context):
         
 
     course_skills_data = get_course_data(body["coursesList"])
+    highest_count_skill = get_highest_count_skill(course_skills_data)
+    print(f"Highest count skill: {highest_count_skill}")
+    
     summary = chatgpt_summary(course_skills_data)
     
     # highlight = compile_highlight(summary, course_skills_data)
