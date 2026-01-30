@@ -73,15 +73,18 @@ def get_highest_count_skill(course_skill_data):
     max_count_skill = None
     max_count = 0
     max_level_skill = None
-    max_skill_sum = 0
+    max_skill_average = 0
+    
     for skill_id, skill_data in skill_id_count.items():
         if skill_data["count"] > max_count:
             max_count_skill = skill_data
             max_count = skill_data["count"]
         
-        if skill_data["sum_skill_level"] > max_skill_sum:
+        skill_average = skill_data["sum_skill_level"] / len(skill_data["course_code"])
+        skill_data["skill_level_average"] = skill_average
+        if skill_average > max_skill_average:
             max_level_skill = skill_data
-            max_skill_sum = skill_data["sum_skill_level"]
+            max_skill_average = skill_average
         
 
     return max_count_skill, max_level_skill
