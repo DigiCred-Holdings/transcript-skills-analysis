@@ -55,7 +55,7 @@ def get_highest_count_skill(course_skill_data):
     for course in course_skill_data:
         for skill in course["skills_curated"]:
             if skill["skill_id"] not in skill_id_count:
-                skill_id_count["skill_id"] = {
+                skill_id_count[skill["skill_id"]] = {
                     "count": 1,
                     "skill": skill,
                     "course_code": [course["code"]]
