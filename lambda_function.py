@@ -64,6 +64,7 @@ def get_highest_count_skill(course_skill_data):
                 skill_id_count["skill_id"]["count"] += 1
                 skill_id_count["skill_id"]["course_code"].append(course["code"])
     
+    print(skill_id_count)
     max_count_skill = None
     max_count = 0
     for skill_id, skill_data in skill_id_count.items():
