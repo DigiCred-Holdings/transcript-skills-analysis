@@ -82,19 +82,19 @@ def get_skills_of_interest(all_skills):
     max_average_level = 0
     unique_skill = None
     unique_skill_frequency = float("inf")
-    for _, skill_data in all_skills.items():
+    for id, skill_data in all_skills.items():
         if skill_data["count"] > max_count:
-            max_count_skill = skill_data
+            max_count_skill = id
             max_count = skill_data["count"]
         
         skill_average = skill_data["sum_skill_level"] / len(skill_data["courses"])
         skill_data["skill_level_average"] = skill_average
         if skill_average > max_average_level:
-            max_level_skill = skill_data
+            max_level_skill = id
             max_average_level = skill_average
         
         if skill_data["frequency"] < unique_skill_frequency:
-            unique_skill = skill_data
+            unique_skill = id
             unique_skill_frequency = skill_data["frequency"]
     
 
