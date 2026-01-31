@@ -201,7 +201,7 @@ def lambda_handler(event, context):
     
     # highlight = compile_highlight(summary, course_skills_data)
     
-    analyzed_course_ids = [course["id"] for course in course_skills_data]
+    analyzed_course_ids = [course["code"] for course in course_skills_data]
     response = {
         'status': 200,
         'body': {
