@@ -79,7 +79,7 @@ def get_skills_of_interest(course_skill_data):
     unique_skill = None
     unique_skill_frequency = float("inf")
     for _, skill_data in skill_id_count.items():
-        if skill_data["count"] > max_count or (skill_data["count"] == max_count and skill_data["frequency"] < max_count_skill["frequency"]):
+        if skill_data["count"] > max_count:
             max_count_skill = skill_data
             max_count = skill_data["count"]
         
