@@ -51,34 +51,35 @@ def get_course_data(course_title_code_list):
     course_skill_data = find_relevant_courses(course_title_code_list, all_courses)    
     return course_skill_data
 
-
-def get_skills_of_interest(course_skill_data):
-    skill_id_count = {}
+def package_skills(course_skill_data):
+    student_skills = {}
     for course in course_skill_data:
         for skill in course["skills_curated"]:
             id = skill["skill_id"]
-            if id not in skill_id_count:
-                skill_id_count[id] = {
+            if id not in student_skills:
+                student_skills[id] = {
                     "count": 1,
                     "max_skill_level": skill["skill_level"],
                     "sum_skill_level": skill["skill_level"],
                     "skill": skill,
-                    "course_code": [course["code"]]
+                    "courses": [(course["code"], skill["level"])]
                 }
             else:
-                skill_id_count[id]["count"] += 1
-                if skill["skill_level"] > skill_id_count[id]["max_skill_level"]: 
-                    skill_id_count[id]["max_skill_level"] = skill["skill_level"]
-                skill_id_count[id]["sum_skill_level"] += skill["skill_level"]
-                skill_id_count[id]["course_code"].append(course["code"])
+                student_skills[id]["count"] += 1
+                if skill["skill_level"] > student_skills[id]["max_skill_level"]: 
+                    student_skills[id]["max_skill_level"] = skill["skill_level"]
+                student_skills[id]["sum_skill_level"] += skill["skill_level"]
+                student_skills[id]["courses"].append((course["code"], skill["level"]))
+    return student_skills
 
+def get_skills_of_interest(all_skills):
     max_count_skill = None
     max_count = 0
     max_level_skill = None
     max_average_level = 0
     unique_skill = None
     unique_skill_frequency = float("inf")
-    for _, skill_data in skill_id_count.items():
+    for _, skill_data in all_skills.items():
         if skill_data["count"] > max_count:
             max_count_skill = skill_data
             max_count = skill_data["count"]
@@ -95,7 +96,7 @@ def get_skills_of_interest(course_skill_data):
     
 
     return [max_count_skill, max_level_skill, unique_skill]
-      
+
 
 def invoke_bedrock_model(messages: list[dict[str, str]]):
     client = boto3.client("bedrock-runtime")
@@ -228,10 +229,12 @@ def lambda_handler(event, context):
      
 
     course_skills_data = get_course_data(body["coursesList"])
-    skills_of_interest = get_skills_of_interest(course_skills_data)
+    student_skills = package_skills(course_skills_data)
+    skills_of_interest = get_skills_of_interest(student_skills)
+    
     print("Highest count skill:", skills_of_interest[0])
     print("Highest level skill:", skills_of_interest[1])
-    print("Most unique skill:", skills_of_interest[1])
+    print("Most unique skill:", skills_of_interest[2])
     
     summary = chatgpt_summary(course_skills_data)
     
@@ -241,6 +244,7 @@ def lambda_handler(event, context):
     response = {
         'status': 200,
         'body': {
+            "total_skills": total_skills,
             "summary": summary,
             "course_ids": analyzed_course_ids,
         }
