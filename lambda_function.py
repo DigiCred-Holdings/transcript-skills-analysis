@@ -85,7 +85,7 @@ def get_skills_of_interest(all_skills):
             max_count_skill = skill_data
             max_count = skill_data["count"]
         
-        skill_average = skill_data["sum_skill_level"] / len(skill_data["course_code"])
+        skill_average = skill_data["sum_skill_level"] / len(skill_data["courses"])
         skill_data["skill_level_average"] = skill_average
         if skill_average > max_average_level:
             max_level_skill = skill_data
