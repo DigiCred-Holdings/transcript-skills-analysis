@@ -20,7 +20,8 @@ def load_skills_dataset():
         raise Exception(f'Failed to parse data from s3:', e)
     return result
 
-def find_relevant_courses(course_title_code_list, all_courses):
+
+def find_relevant_courses(course_title_code_list, all_courses):    
     all_course_codes = [course["code"].upper() for course in all_courses if course["code"]]
     found_student_courses = []
     missing_codes = []
@@ -50,7 +51,8 @@ def get_course_data(course_title_code_list):
     course_skill_data = find_relevant_courses(course_title_code_list, all_courses)    
     return course_skill_data
 
-def get_highest_count_skill(course_skill_data):
+
+def get_skills_of_interest(course_skill_data):
     skill_id_count = {}
     for course in course_skill_data:
         for skill in course["skills_curated"]:
@@ -73,22 +75,27 @@ def get_highest_count_skill(course_skill_data):
     max_count_skill = None
     max_count = 0
     max_level_skill = None
-    max_skill_average = 0
-    
-    for skill_id, skill_data in skill_id_count.items():
-        if skill_data["count"] > max_count:
+    max_average_level = 0
+    unique_skill = None
+    unique_skill_frequency = float("inf")
+    for _, skill_data in skill_id_count.items():
+        if skill_data["count"] > max_count or (skill_data["count"] == max_count and skill_data["frequency"] < max_count_skill["frequency"]):
             max_count_skill = skill_data
             max_count = skill_data["count"]
         
         skill_average = skill_data["sum_skill_level"] / len(skill_data["course_code"])
         skill_data["skill_level_average"] = skill_average
-        if skill_average > max_skill_average:
+        if skill_average > max_average_level:
             max_level_skill = skill_data
-            max_skill_average = skill_average
+            max_average_level = skill_average
         
+        if skill_data["frequency"] < unique_skill_frequency:
+            unique_skill = skill_data
+            unique_skill_frequency = skill_data["frequency"]
+    
 
-    return max_count_skill, max_level_skill
-        
+    return [max_count_skill, max_level_skill, unique_skill]
+      
 
 def invoke_bedrock_model(messages: list[dict[str, str]]):
     client = boto3.client("bedrock-runtime")
@@ -218,11 +225,13 @@ def lambda_handler(event, context):
             'statusCode': 400,
             'body': 'Invalid input: coursesList and source are required.'
         }
-        
+     
 
     course_skills_data = get_course_data(body["coursesList"])
-    highest_count_skill = get_highest_count_skill(course_skills_data)
-    print(f"Highest count skill: {highest_count_skill}")
+    skills_of_interest = get_skills_of_interest(course_skills_data)
+    print("Highest count skill:", skills_of_interest[0])
+    print("Highest level skill:", skills_of_interest[1])
+    print("Most unique skill:", skills_of_interest[1])
     
     summary = chatgpt_summary(course_skills_data)
     
