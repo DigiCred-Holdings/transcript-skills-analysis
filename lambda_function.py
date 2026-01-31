@@ -51,6 +51,7 @@ def get_course_data(course_title_code_list):
     course_skill_data = find_relevant_courses(course_title_code_list, all_courses)    
     return course_skill_data
 
+
 def package_skills(course_skill_data):
     student_skills = {}
     for course in course_skill_data:
@@ -62,14 +63,14 @@ def package_skills(course_skill_data):
                     "max_skill_level": skill["skill_level"],
                     "sum_skill_level": skill["skill_level"],
                     "skill": skill,
-                    "courses": [(course["code"], skill["level"])]
+                    "courses": [(course["code"], skill["skill_level"])]
                 }
             else:
                 student_skills[id]["count"] += 1
                 if skill["skill_level"] > student_skills[id]["max_skill_level"]: 
                     student_skills[id]["max_skill_level"] = skill["skill_level"]
                 student_skills[id]["sum_skill_level"] += skill["skill_level"]
-                student_skills[id]["courses"].append((course["code"], skill["level"]))
+                student_skills[id]["courses"].append((course["code"], skill["skill_level"]))
     return student_skills
 
 def get_skills_of_interest(all_skills):
