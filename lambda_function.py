@@ -89,9 +89,9 @@ def get_skills_of_interest(course_skill_data):
             max_level_skill = skill_data
             max_average_level = skill_average
         
-        if skill_data["frequency"] < unique_skill_frequency:
+        if skill_data["skill"]["frequency"] < unique_skill_frequency:
             unique_skill = skill_data
-            unique_skill_frequency = skill_data["frequency"]
+            unique_skill_frequency = skill_data["skill"]["frequency"]
     
 
     return [max_count_skill, max_level_skill, unique_skill]
