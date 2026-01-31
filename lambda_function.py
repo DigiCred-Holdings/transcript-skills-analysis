@@ -161,45 +161,6 @@ def chatgpt_summary(course_skills_data):
     return summary
 
 
-def compile_highlight(summary, course_skills_data):
-
-    # Helper to clean skill strings of leading numbers/formatting
-    def clean_skill(s):
-        return re.sub(r"^\s*[\d]+[.)]\s*", "", str(s)).strip()
-
-    # Build a list of standout skills by selecting the most common skills across courses
-    skill_counts = {}
-    for course in course_skills_data:
-        skills = [clean_skill(s) for s in course["skills"]]
-        for skill in skills:
-            skill_counts[skill] = skill_counts.get(skill, 0) + 1
-
-    # Pick the top 3 most common skills as standout skills
-    sorted_skills = sorted(skill_counts.items(), key=lambda item: item[1], reverse=True)
-    top_3_skills = [s[0] for s in sorted_skills[:3]]
-    
-    # Format standout list 
-    standout_sentence = ""
-    quoted = [f"'{s}'" for s in top_3_skills]
-    if len(quoted) > 1:
-        quoted_str = ", ".join(quoted[:-1]) + f", and {quoted[-1]}"
-    else:
-        quoted_str = quoted[0]
-    standout_sentence = f" Some of your standout skills are {quoted_str}."
-
-    # Final 'totals' sentence
-    totals_sentence = ""
-    totals_sentence = (
-        f"Overall, we have analyzed {len(course_skills_data)} of your courses "
-        f"and found {len(skill_counts.keys())} skills!"
-    )
-    totals_sentence += standout_sentence
-
-    # Build the highlight
-    highlight = f"{summary}\n\n{totals_sentence}".strip()
-    return highlight
-
-
 from time import perf_counter
 def _timeit(f):
     def wrap(*a, **kw):
@@ -227,8 +188,7 @@ def lambda_handler(event, context):
             'statusCode': 400,
             'body': 'Invalid input: coursesList and source are required.'
         }
-     
-
+    
     course_skills_data = get_course_data(body["coursesList"])
     student_skills = package_skills(course_skills_data)
     skills_of_interest = get_skills_of_interest(student_skills)
@@ -237,7 +197,7 @@ def lambda_handler(event, context):
     print("Highest level skill:", skills_of_interest[1])
     print("Most unique skill:", skills_of_interest[2])
     
-    summary = chatgpt_summary(course_skills_data)
+    # summary = chatgpt_summary(course_skills_data)
     
     # highlight = compile_highlight(summary, course_skills_data)
     
@@ -245,8 +205,9 @@ def lambda_handler(event, context):
     response = {
         'status': 200,
         'body': {
-            "total_skills": total_skills,
-            "summary": summary,
+            "skills": student_skills,
+            "skills_of_interest": skills_of_interest,
+            # "summary": summary,
             "course_ids": analyzed_course_ids,
         }
     }
