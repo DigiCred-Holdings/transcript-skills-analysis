@@ -5,6 +5,7 @@ import os
 import re
 
 s3_client = boto3.client('s3')
+bedrock_client = boto3.client("bedrock-runtime")
 REGISTRY_URI = os.environ['REGISTRY_S3_URI']
 
 def load_skills_dataset():
@@ -19,7 +20,6 @@ def load_skills_dataset():
     except Exception as e:
         raise Exception(f'Failed to parse data from s3:', e)
     return result
-
 
 def find_relevant_courses(course_title_code_list, all_courses):    
     all_course_codes = [course["code"].upper() for course in all_courses if course["code"]]
@@ -45,12 +45,10 @@ def find_relevant_courses(course_title_code_list, all_courses):
     print(f"Could not find the following courses in registry: {missing_codes}")
     return found_student_courses
 
-
 def get_course_data(course_title_code_list):
     all_courses = load_skills_dataset()
     course_skill_data = find_relevant_courses(course_title_code_list, all_courses)    
     return course_skill_data
-
 
 def package_skills(course_skill_data):
     student_skills = {}
@@ -100,6 +98,36 @@ def get_skills_of_interest(all_skills):
 
     return [max_count_skill, max_level_skill, unique_skill]
 
+def invoke_bedrock(system_prompt, messages):
+    response = bedrock_client.converse(
+        modelId="amazon.nova-micro-v1:0",
+        messages=messages,
+        system=system_prompt,
+        inferenceConfig={
+            "maxTokens": 2000,
+            "temperature": 0.0
+        }
+    )
+    print("Bedrock response: ", response)
+    return response["output"]["message"]["content"][0]["text"]
+
+def add_future_pathways(skills_of_interest):
+    system_prompt = [{
+        "text": '''
+            Write a short summary of a few ways that a high school student could potentially further their 
+            development of a given skill. Try and list a wide variety of pathways including academic and 
+            professional.      
+        '''
+    }]
+    
+    
+    user_messages = [{
+        "role": "user",
+        "content": [{
+            "text": skill["name"]
+        } for skill in skills_of_interest]
+    }]
+    invoke_bedrock(system_prompt, user_messages)
 
 def llm_summary(skills_of_interest):
     system_prompt = [{
@@ -122,21 +150,7 @@ def llm_summary(skills_of_interest):
         }]
     }]
     
-    client = boto3.client("bedrock-runtime")
-
-    response = client.converse(
-        modelId="amazon.nova-micro-v1:0",
-        messages=user_messages,
-        system=system_prompt,
-        inferenceConfig={
-            "maxTokens": 2000,
-            "temperature": 0.0
-        }
-    )
-
-    assistant_msg = response["output"]["message"]["content"][0]["text"]
-    return assistant_msg
-
+    return invoke_bedrock(system_prompt, user_messages)
 
 def lambda_handler(event, context):
     if type(event["body"]) is str:
@@ -162,9 +176,11 @@ def lambda_handler(event, context):
 
     skills_of_interest = get_skills_of_interest(student_skills)
     full_skills_of_interest = [student_skills[id] for id in skills_of_interest]
-    print("Highest count skill:", skills_of_interest[0])
-    print("Highest level skill:", skills_of_interest[1])
-    print("Most unique skill:", skills_of_interest[2])
+    add_future_pathways(full_skills_of_interest)
+    
+    print("Highest count skill:", full_skills_of_interest[0])
+    print("Highest level skill:", full_skills_of_interest[1])
+    print("Most unique skill:", full_skills_of_interest[2])
     
     summary = llm_summary(full_skills_of_interest)
     
