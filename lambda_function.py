@@ -119,13 +119,14 @@ def add_future_pathways(skills_of_interest):
         '''
     }]
     
-    user_messages = [{
-        "role": "user",
-        "content": [{
-            "text": skill["name"]
-        } for skill in skills_of_interest]
-    }]
-    invoke_bedrock(system_prompt, user_messages)
+    for skill in skills_of_interest:
+        user_messages = [{
+            "role": "user",
+            "content": [{
+                "text": skill["name"]
+            }]
+        }]
+        skill["pathways"] = invoke_bedrock(system_prompt, user_messages)
 
 def llm_summary(skills_of_interest):
     system_prompt = [{
