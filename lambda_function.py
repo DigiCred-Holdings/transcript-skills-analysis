@@ -115,9 +115,9 @@ def add_future_pathways(skills_of_interest):
     system_prompt = [{
         "text": '''
             In about 20 words, detail a few ways that graduating high school student could further their
-            development of a given skill. Include a relevant variety of majors, professional 
+            development of a given skill. Include a variety of majors, professional 
             certifications, or careers that value and develop that skill. Write in full sentences in imperative form.
-            Do not directly reference the skill. Use "or" when listing options.
+            Instead of using "and", use "or". Do not include the name of the skill. 
         '''
     }]
     
