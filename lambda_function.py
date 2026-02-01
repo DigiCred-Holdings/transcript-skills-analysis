@@ -207,8 +207,8 @@ def lambda_handler(event, context):
     response = {
         'status': 200,
         'body': {
-            "skills": student_skills,
-            "skills_of_interest": skills_of_interest,
+            "count": len(student_skills),
+            "skills_of_interest": [student_skills[id] for id in skills_of_interest],
             # "summary": summary,
             "course_ids": analyzed_course_ids,
         }
