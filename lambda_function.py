@@ -101,34 +101,6 @@ def get_skills_of_interest(all_skills):
     return [max_count_skill, max_level_skill, unique_skill]
 
 
-def invoke_bedrock_model(messages: list[dict[str, str]]):
-    client = boto3.client("bedrock-runtime")
-
-    # Build the conversation for the Converse API
-    system_prompt = []
-    conversation = []
-    for msg in messages:
-        role = msg["role"]  # 'system'|'user'|'assistant'
-        if role == "system":
-            system_prompt.append({"text": msg["content"]})
-            continue
-        content = [{"text": msg["content"]}]
-        conversation.append({"role": role, "content": content})
-
-    response = client.converse(
-        modelId="amazon.nova-micro-v1:0",
-        messages=conversation,
-        system=system_prompt,
-        inferenceConfig={
-            "maxTokens": 2000,
-            "temperature": 0.0
-        }
-    )
-
-    assistant_msg = response["output"]["message"]["content"][0]["text"]
-    return assistant_msg
-
-
 def llm_summary(skills_of_interest):
     system_prompt = [{
         "text": '''
@@ -145,7 +117,9 @@ def llm_summary(skills_of_interest):
     }]
     user_messages = [{
         "role": "user",
-        "content": ", ".join([skill["name"] for skill in skills_of_interest])
+        "content": [{
+            "text": ", ".join([skill["name"] for skill in skills_of_interest])
+        }]
     }]
     
     client = boto3.client("bedrock-runtime")
