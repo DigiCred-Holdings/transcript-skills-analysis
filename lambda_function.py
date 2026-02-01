@@ -114,8 +114,9 @@ def invoke_bedrock(system_prompt, messages):
 def add_future_pathways(skills_of_interest):
     system_prompt = [{
         "text": '''
-            In 40 words or less, list a few ways that a high school student could potentially further their
-            development of a given skill. Try and list several pathways including academic and professional.      
+            In 40 words or less, list a few ways that graduating high school student could further their
+            development of a given skill. Include potential courses of study, professional certifications,
+            or careers that value and develop that skill. Write in full sentences. Do not just list options.
         '''
     }]
     
