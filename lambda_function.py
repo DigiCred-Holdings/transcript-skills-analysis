@@ -105,7 +105,7 @@ def invoke_bedrock(system_prompt, messages):
         system=system_prompt,
         inferenceConfig={
             "maxTokens": 2000,
-            "temperature": 0.0
+            "temperature": 0.4
         }
     )
     print("Bedrock response: ", response)
