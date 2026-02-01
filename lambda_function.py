@@ -101,7 +101,9 @@ def get_skills_of_interest(all_skills):
 def get_skill_level_counts(all_skills):
     skill_level_counts = [0, 0, 0]
     for skill in all_skills:
-        max_skill_level = max([level for _, level in skill["courses"]])
+        max_skill_level = 0
+        for course in skill["courses"]:
+            if course[1] > max_skill_level: max_skill_level = course[1]
         skill_level_counts[max_skill_level - 1] += 1
     return skill_level_counts
 
