@@ -129,50 +129,41 @@ def invoke_bedrock_model(messages: list[dict[str, str]]):
     return assistant_msg
 
 
-def get_prompt(course_skills_data):
-    course_descriptions = [(course["title"], course["description"]) for course in course_skills_data]
-    skills_by_course = [(course["title"], course["skills"]) for course in course_skills_data]
-    prompt = [
-        {"role": "system", "content": '''
-            You are summarizing a university-level student's abilities and skills.
-            You will receive:
-            1) A list of completed courses with descriptions
-            2) A list of skills associated with those courses
+def llm_summary(skills_of_interest):
+    system_prompt = [{
+        "text": '''
+            Write a summary to go at the end of a transcript skill analysis for a high school student.
+            The primary goal of the summary should be to reinforce to the student that their transcript represents
+            real skills that are useful and can help them reach their goals. The blurb should be less than 100 words,
+            positive in tone, and written in the second person. Don't be too sycophantic or make specific assertions
+            about what they are qualified to do. For example, given the skills Writing, Critical Thinking /
+            Problem Solving, Woodworking, Research, and Problem Solving a good summary might look like: 
+            "You can write clearly, question assumptions, and finish a woodworking project without splinters. 
+            Research papers don't intimidate you, and you've learned to map big assignments into small, doable steps.
+            These skills will carry you well into your future and beyond."            
+        '''
+    }]
+    user_messages = [{
+        "role": "user",
+        "content": ", ".join([skill["name"] for skill in skills_of_interest])
+    }]
+    
+    client = boto3.client("bedrock-runtime")
 
-            Your task:
-            - Write a short summary (max 3 sentences) of the student's strengths.
-            - Mention at least one notable skill group they excel in.
-            - Highlight at least one specific skill learned in a course (referencing course context).
-            - Keep the tone positive, in the style of: "Your coursework has given you skills in ... Notably your accounting class taught you ..."
-            - Avoid lists; keep it narrative and concise.
+    response = client.converse(
+        modelId="amazon.nova-micro-v1:0",
+        messages=user_messages,
+        system=system_prompt,
+        inferenceConfig={
+            "maxTokens": 2000,
+            "temperature": 0.0
+        }
+    )
 
-            Output only the 3-sentence summary.
-        '''},
-        {"role": "user", "content": f'''
-            1) {course_descriptions}
-            2) {skills_by_course}
-        '''}
-    ]
-
-    return prompt
-
-
-def chatgpt_summary(course_skills_data):
-    prompt = get_prompt(course_skills_data)
-    summary = invoke_bedrock_model(prompt)
-    return summary
-
-
-from time import perf_counter
-def _timeit(f):
-    def wrap(*a, **kw):
-        t=perf_counter(); r=f(*a, **kw)
-        print(f"{f.__name__} took {(perf_counter()-t)*1000:.3f} ms")
-        return r
-    return wrap
+    assistant_msg = response["output"]["message"]["content"][0]["text"]
+    return assistant_msg
 
 
-@_timeit
 def lambda_handler(event, context):
     if type(event["body"]) is str:
         body = json.loads(event["body"])
@@ -192,24 +183,24 @@ def lambda_handler(event, context):
         }
     
     course_skills_data = get_course_data(body["coursesList"])
+
     student_skills = package_skills(course_skills_data)
+
     skills_of_interest = get_skills_of_interest(student_skills)
-    
+    full_skills_of_interest = [student_skills[id] for id in skills_of_interest]
     print("Highest count skill:", skills_of_interest[0])
     print("Highest level skill:", skills_of_interest[1])
     print("Most unique skill:", skills_of_interest[2])
     
-    # summary = chatgpt_summary(course_skills_data)
-    
-    # highlight = compile_highlight(summary, course_skills_data)
+    summary = llm_summary(full_skills_of_interest)
     
     analyzed_course_ids = [course["code"] for course in course_skills_data]
     response = {
         'status': 200,
         'body': {
             "count": str(len(student_skills)),
-            "skills_of_interest": [student_skills[id] for id in skills_of_interest],
-            # "summary": summary,
+            "skills_of_interest": full_skills_of_interest,
+            "summary": summary,
             "course_ids": analyzed_course_ids,
         }
     }
