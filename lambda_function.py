@@ -116,7 +116,8 @@ def add_future_pathways(skills_of_interest):
         "text": '''
             In 40 words or less, list a few ways that graduating high school student could further their
             development of a given skill. Include potential courses of study, professional certifications,
-            or careers that value and develop that skill. Write in full sentences. Do not just list options.
+            or careers that value and develop that skill. Write in full sentences in imperative form: "Hone via...",
+            "Leverage in...", "Study...", "Progress to...", "Earn..."
         '''
     }]
     
