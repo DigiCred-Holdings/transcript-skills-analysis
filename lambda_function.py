@@ -98,6 +98,13 @@ def get_skills_of_interest(all_skills):
 
     return [max_count_skill, max_level_skill, unique_skill]
 
+def get_skill_level_counts(all_skills):
+    skill_level_counts = [0, 0, 0]
+    for skill in all_skills:
+        max_skill_level = max([level for _, level in skill["courses"]])
+        skill_level_counts[max_skill_level - 1] += 1
+    return skill_level_counts
+
 def invoke_bedrock(system_prompt, messages):
     response = bedrock_client.converse(
         modelId="amazon.nova-micro-v1:0",
@@ -183,6 +190,7 @@ def lambda_handler(event, context):
     print("Highest level skill:", full_skills_of_interest[1])
     print("Most unique skill:", full_skills_of_interest[2])
     
+    skill_level_counts = get_skill_level_counts(student_skills)
     summary = llm_summary(full_skills_of_interest)
     
     analyzed_course_ids = [course["code"] for course in course_skills_data]
@@ -191,6 +199,7 @@ def lambda_handler(event, context):
         'body': {
             "count": str(len(student_skills)),
             "skills_of_interest": full_skills_of_interest,
+            "skill_level_counts": skill_level_counts,
             "summary": summary,
             "course_ids": analyzed_course_ids,
         }
