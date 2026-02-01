@@ -60,7 +60,7 @@ def package_skills(course_skill_data):
             if id not in student_skills:
                 student_skills[id] = {
                     "name": skill["skill"],
-                    "category": skill["category"],
+                    "category": skill["skill_category"],
                     "frequency": skill["frequency"],
                     "count": 1,
                     "max_skill_level": skill["skill_level"],
