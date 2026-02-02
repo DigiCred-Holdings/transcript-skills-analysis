@@ -1,216 +1,167 @@
 import json
 import time
 import boto3
-from openai import OpenAI
 import os
 import re
-from typing import Any
 
+s3_client = boto3.client('s3')
+bedrock_client = boto3.client("bedrock-runtime")
+REGISTRY_URI = os.environ['REGISTRY_S3_URI']
 
-def build_query(course_title_code_list, school_code):
-    # Build the SQL query to fetch course data based on course titles and codes
-    query = f"""
-    SELECT id, data_title, data_code, data_desc, dse_skills
-    FROM courses
-    WHERE data_src = '{school_code}'
-        AND data_code IN ({', '.join(['?']*len(course_title_code_list))})
-    """
-    return query
+def load_skills_dataset():
+    # Get bucket key from environment variable S3 URI e.g. s3://digicred-credential-analysis/dev/staging_registry.json
+    bucket, key = REGISTRY_URI.replace("s3://", "").split("/", 1)
+    response = s3_client.get_object(Bucket=bucket, Key=key)
+    if response['ResponseMetadata']['HTTPStatusCode'] != 200:
+        raise Exception(f"Failed to retrieve data from S3: {response['ResponseMetadata']['HTTPStatusCode']}")
+    try:
+        content = response['Body'].read().decode('utf-8')
+        result = json.loads(content)
+    except Exception as e:
+        raise Exception(f'Failed to parse data from s3:', e)
+    return result
 
+def find_relevant_courses(course_title_code_list, all_courses):    
+    all_course_codes = [course["code"].upper() for course in all_courses if course["code"]]
+    found_student_courses = []
+    missing_codes = []
+    for given_title, given_code in course_title_code_list:
+        candidates = []
+        for code_to_evaluate in all_course_codes:
+            if given_code in code_to_evaluate:
+                candidates += [course for course in all_courses if course.get("code") == code_to_evaluate]
 
-# Helper function to extract VarCharValue from Athena query result
-def get_var_char_values(d):
-    return [obj['VarCharValue'] for obj in d['Data']]
+        if len(candidates) == 1:
+            found_student_courses.append(candidates[0])
+        elif len(candidates):
+            print(f"{len(candidates)} candidates for course were found in the registry for code", given_code, given_title)
+            print(", ".join([course["code"] + ": " + course["name"] for course in candidates]))
+            missing_codes.append([given_title, given_code])
+        else:
+            print(f"Course code was not found in the registry", given_code)
+            missing_codes.append([given_title, given_code])
 
+    print(f"Warning: {len(missing_codes)} courses were not found in the database.")
+    print(f"Could not find the following courses in registry: {missing_codes}")
+    return found_student_courses
 
-def get_course_data_from_db(course_title_code_list, school_name):
-    client = boto3.client('athena')   # create athena client
-    
-    school_name_code_lookup = {
-        "university of wyoming": "UWYO",
-    }
-    school_code = school_name_code_lookup.get(school_name.lower())
-    
-    query = build_query(course_title_code_list, school_code)
-    
-    print("Executing query on school code:", school_code)
-    # Start the Athena query execution
-    start_query_response = client.start_query_execution(
-        QueryString=query,
-        QueryExecutionContext={
-            'Database': os.environ['ATHENA_DATABASE']
-        },
-        ResultConfiguration={
-            'OutputLocation': os.environ['ATHENA_OUTPUT_S3']
-        },
-        ExecutionParameters=[code for _, code in course_title_code_list]
-    )
-    print("Query execution started:", start_query_response)
-
-    query_execution_id = start_query_response['QueryExecutionId']
-    
-    # Poll the query status until it completes
-    while True:
-        status_response = client.get_query_execution(QueryExecutionId=query_execution_id)
-        state = status_response['QueryExecution']['Status']['State']
-        reason = status_response['QueryExecution']
-        
-        if state == 'SUCCEEDED':
-            break
-        elif state in ['FAILED', 'CANCELLED']:
-            raise Exception(f"Query {state}: {reason}")
-        
-        time.sleep(0.2)  # Poll every 0.2 seconds
-        
-    results_response = client.get_query_results(QueryExecutionId=query_execution_id)
-    
-    if not results_response or 'ResultSet' not in results_response or 'Rows' not in results_response['ResultSet']:
-        return []
- 
-    # Unpack the results into a list of dictionaries, using the header row as keys
-    header, *rows = results_response['ResultSet']['Rows']
-    header = get_var_char_values(header)
-    unpacked_results = [dict(zip(header, get_var_char_values(row))) for row in rows]    
-    return unpacked_results
-
-
-def get_course_data(course_title_code_list, school_name):
-    db_courses = get_course_data_from_db(course_title_code_list, school_name)
-    course_skill_data = []
-    
-    for _, course_code in course_title_code_list:
-        code_matches = [course for course in db_courses if course['data_code'] == course_code]
-        if code_matches:
-            course = code_matches[0]  # Take the first match if multiple
-            course_skill_data.append({
-                "id": course['id'],
-                "title": course['data_title'],
-                "code": course['data_code'],
-                "description": course['data_desc'],
-                "skills": course['dse_skills'].strip("[]").split(", ") if course['dse_skills'] else []
-            })
-    
-    print(f"Fetched {len(course_skill_data)} courses with skills from DB.")
-    
-    if len(course_skill_data) < len(course_title_code_list):
-        missing_count = len(course_title_code_list) - len(course_skill_data)
-        missing_codes = set(code for _, code in course_title_code_list) - set(course['code'] for course in course_skill_data)
-        print(f"Warning: {missing_count} courses were not found in the database. Missing codes: {missing_codes}")
-    
+def get_course_data(course_title_code_list):
+    all_courses = load_skills_dataset()
+    course_skill_data = find_relevant_courses(course_title_code_list, all_courses)    
     return course_skill_data
 
+def package_skills(course_skill_data):
+    student_skills = {}
+    for course in course_skill_data:
+        for skill in course["skills_curated"]:
+            id = skill["skill_id"]
+            if id not in student_skills:
+                student_skills[id] = {
+                    "name": skill["skill"],
+                    "category": skill["skill_category"],
+                    "frequency": skill["frequency"],
+                    "count": 1,
+                    "max_skill_level": skill["skill_level"],
+                    "sum_skill_level": skill["skill_level"],
+                    "courses": [(course["code"], skill["skill_level"])]
+                }
+            else:
+                student_skills[id]["count"] += 1
+                if skill["skill_level"] > student_skills[id]["max_skill_level"]: 
+                    student_skills[id]["max_skill_level"] = skill["skill_level"]
+                student_skills[id]["sum_skill_level"] += skill["skill_level"]
+                student_skills[id]["courses"].append((course["code"], skill["skill_level"]))
+    return student_skills
 
-def invoke_bedrock_model(messages: list[dict[str, str]]):
-    client = boto3.client("bedrock-runtime")
+def get_skills_of_interest(all_skills):
+    max_count_skill = None
+    max_count = 0
+    max_level_skill = None
+    max_average_level = 0
+    unique_skill = None
+    unique_skill_frequency = float("inf")
+    for id, skill_data in all_skills.items():
+        if skill_data["count"] > max_count:
+            max_count_skill = id
+            max_count = skill_data["count"]
+        
+        skill_average = skill_data["sum_skill_level"] / len(skill_data["courses"])
+        skill_data["skill_level_average"] = skill_average
+        if skill_average > max_average_level:
+            max_level_skill = id
+            max_average_level = skill_average
+        
+        if skill_data["frequency"] < unique_skill_frequency:
+            unique_skill = id
+            unique_skill_frequency = skill_data["frequency"]
+    
 
-    # Build the conversation for the Converse API
-    system_prompt = []
-    conversation = []
-    for msg in messages:
-        role = msg["role"]  # 'system'|'user'|'assistant'
-        if role == "system":
-            system_prompt.append({"text": msg["content"]})
-            continue
-        content = [{"text": msg["content"]}]
-        conversation.append({"role": role, "content": content})
+    return [max_count_skill, max_level_skill, unique_skill]
 
-    response = client.converse(
+def get_skill_level_counts(all_skills):
+    skill_level_counts = [0, 0, 0]
+    for id, skill in all_skills.items():
+        max_skill_level = 0
+        for course in skill["courses"]:
+            if course[1] > max_skill_level: max_skill_level = course[1]
+        skill_level_counts[max_skill_level - 1] += 1
+    return skill_level_counts
+
+def invoke_bedrock(system_prompt, messages):
+    response = bedrock_client.converse(
         modelId="amazon.nova-micro-v1:0",
-        messages=conversation,
+        messages=messages,
         system=system_prompt,
         inferenceConfig={
             "maxTokens": 2000,
-            "temperature": 0.0
+            "temperature": 0.6
         }
     )
+    print("Bedrock response: ", response)
+    return response["output"]["message"]["content"][0]["text"]
 
-    assistant_msg = response["output"]["message"]["content"][0]["text"]
-    return assistant_msg
-
-
-def get_prompt(course_skills_data):
-    course_descriptions = [(course["title"], course["description"]) for course in course_skills_data]
-    skills_by_course = [(course["title"], course["skills"]) for course in course_skills_data]
-    prompt = [
-        {"role": "system", "content": '''
-            You are summarizing a university-level student's abilities and skills.
-            You will receive:
-            1) A list of completed courses with descriptions
-            2) A list of skills associated with those courses
-
-            Your task:
-            - Write a short summary (max 3 sentences) of the student's strengths.
-            - Mention at least one notable skill group they excel in.
-            - Highlight at least one specific skill learned in a course (referencing course context).
-            - Keep the tone positive, in the style of: "Your coursework has given you skills in ... Notably your accounting class taught you ..."
-            - Avoid lists; keep it narrative and concise.
-
-            Output only the 3-sentence summary.
-        '''},
-        {"role": "user", "content": f'''
-            1) {course_descriptions}
-            2) {skills_by_course}
-        '''}
-    ]
-
-    return prompt
-
-
-def chatgpt_summary(course_skills_data):
-    prompt = get_prompt(course_skills_data)
-    summary = invoke_bedrock_model(prompt)
-    return summary
-
-
-def compile_highlight(summary, course_skills_data):
-
-    # Helper to clean skill strings of leading numbers/formatting
-    def clean_skill(s):
-        return re.sub(r"^\s*[\d]+[.)]\s*", "", str(s)).strip()
-
-    # Build a list of standout skills by selecting the most common skills across courses
-    skill_counts = {}
-    for course in course_skills_data:
-        skills = [clean_skill(s) for s in course["skills"]]
-        for skill in skills:
-            skill_counts[skill] = skill_counts.get(skill, 0) + 1
-
-    # Pick the top 3 most common skills as standout skills
-    sorted_skills = sorted(skill_counts.items(), key=lambda item: item[1], reverse=True)
-    top_3_skills = [s[0] for s in sorted_skills[:3]]
+def add_future_pathways(skills_of_interest):
+    system_prompt = [{
+        "text": '''
+            In about 25 words, detail a few ways that graduating high school student could further their
+            development of a given skill. Include a variety of majors, professional 
+            certifications, or careers that value and develop that skill. Write in full sentences in imperative form.
+            Use a direct but unimposing tone. Do not include the name of the skill. 
+        '''
+    }]
     
-    # Format standout list 
-    standout_sentence = ""
-    quoted = [f"'{s}'" for s in top_3_skills]
-    if len(quoted) > 1:
-        quoted_str = ", ".join(quoted[:-1]) + f", and {quoted[-1]}"
-    else:
-        quoted_str = quoted[0]
-    standout_sentence = f" Some of your standout skills are {quoted_str}."
+    for skill in skills_of_interest:
+        user_messages = [{
+            "role": "user",
+            "content": [{
+                "text": skill["name"]
+            }]
+        }]
+        skill["pathways"] = invoke_bedrock(system_prompt, user_messages)
 
-    # Final 'totals' sentence
-    totals_sentence = ""
-    totals_sentence = (
-        f"Overall, we have analyzed {len(course_skills_data)} of your courses "
-        f"and found {len(skill_counts.keys())} skills!"
-    )
-    totals_sentence += standout_sentence
+def llm_summary(skills_of_interest):
+    system_prompt = [{
+        "text": '''
+            Write a summary to go at the end of a transcript skill analysis for a high school student.
+            The primary goal of the summary should be to reinforce to the student that their transcript represents
+            real skills that are useful and can help them reach their goals. The blurb should be less than 100 words,
+            positive in tone, and written in the second person. Don't be too sycophantic or make specific assertions
+            about what they are qualified to do. For example, given the skills Writing, Critical Thinking /
+            Problem Solving, Woodworking, Research, and Problem Solving a good summary might look like: 
+            "You can write clearly, question assumptions, and finish a woodworking project without splinters. 
+            Research papers don't intimidate you, and you've learned to map big assignments into small, doable steps.
+            These skills will carry you well into your future and beyond."            
+        '''
+    }]
+    user_messages = [{
+        "role": "user",
+        "content": [{
+            "text": ", ".join([skill["name"] for skill in skills_of_interest])
+        }]
+    }]
+    
+    return invoke_bedrock(system_prompt, user_messages)
 
-    # Build the highlight
-    highlight = f"{summary}\n\n{totals_sentence}".strip()
-    return highlight
-
-
-from time import perf_counter
-def _timeit(f):
-    def wrap(*a, **kw):
-        t=perf_counter(); r=f(*a, **kw)
-        print(f"{f.__name__} took {(perf_counter()-t)*1000:.3f} ms")
-        return r
-    return wrap
-
-
-@_timeit
 def lambda_handler(event, context):
     if type(event["body"]) is str:
         body = json.loads(event["body"])
@@ -223,25 +174,36 @@ def lambda_handler(event, context):
         }
     
     ()
-    if "coursesList" not in body or "source" not in body:
+    if "coursesList" not in body:
         return {
             'statusCode': 400,
             'body': 'Invalid input: coursesList and source are required.'
         }
-        
+    
+    course_skills_data = get_course_data(body["coursesList"])
 
-    course_skills_data = get_course_data(body["coursesList"], body["source"])
-    summary = chatgpt_summary(course_skills_data)
+    student_skills = package_skills(course_skills_data)
+
+    skills_of_interest = get_skills_of_interest(student_skills)
+    full_skills_of_interest = [student_skills[id] for id in skills_of_interest]
+    add_future_pathways(full_skills_of_interest)
     
-    highlight = compile_highlight(summary, course_skills_data)
+    print("Highest count skill:", full_skills_of_interest[0])
+    print("Highest level skill:", full_skills_of_interest[1])
+    print("Most unique skill:", full_skills_of_interest[2])
     
-    analyzed_course_ids = [course["id"] for course in course_skills_data]
+    skill_level_counts = get_skill_level_counts(student_skills)
+    summary = llm_summary(full_skills_of_interest)
+    
+    analyzed_course_ids = [course["code"] for course in course_skills_data]
     response = {
         'status': 200,
         'body': {
+            "count": str(len(student_skills)),
+            "skills_of_interest": full_skills_of_interest,
+            "skill_level_counts": skill_level_counts,
             "summary": summary,
             "course_ids": analyzed_course_ids,
-            "highlight": highlight
         }
     }
     return response
