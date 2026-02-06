@@ -38,7 +38,7 @@ def find_relevant_courses(course_title_code_list, all_courses):
             missing_codes.append([given_title, given_code])
 
     print(f"Warning: {len(overloaded_codes)} courses found multiple matches in the database")
-    print(f"Could not find single match for the following courses in registry {overloaded_codes}")
+    print(f"Found multiple matches for the following courses in registry {overloaded_codes}")
 
     print(f"Warning: {len(missing_codes)} courses were not found in the database.")
     print(f"Could not find the following courses in registry: {missing_codes}")
