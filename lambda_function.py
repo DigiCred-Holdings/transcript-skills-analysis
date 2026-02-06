@@ -1,8 +1,6 @@
 import json
-import time
 import boto3
 import os
-import re
 
 s3_client = boto3.client('s3')
 bedrock_client = boto3.client("bedrock-runtime")

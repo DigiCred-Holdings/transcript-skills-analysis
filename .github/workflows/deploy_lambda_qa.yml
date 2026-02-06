@@ -1,11 +1,8 @@
-name: Deploy Python Lambda
+name: Deploy qa-transcript-skills-analysis
 
-# Run on both pushes to main branch and commits to pull requests targeting main branch
+# Run on both pushes to main branch
 on:
   push:
-    branches:
-      - main
-  pull_request:
     branches:
       - main
 
@@ -14,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       S3_BUCKET: digicred-lambda-packages
-      S3_KEY: dev-transcript-skills-analysis.zip
-      LAMBDA_FUNCTION_NAME: dev-transcript-skills-analysis
+      S3_KEY: qa-transcript-skills-analysis.zip
+      LAMBDA_FUNCTION_NAME: qa-transcript-skills-analysis
 
     steps:
       - name: Checkout Repository
@@ -26,7 +23,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_ACCESS_KEY_SECRET }}
-          aws-region: us-east-1 # Modify this to your desired AWS region
+          aws-region: us-east-1
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5

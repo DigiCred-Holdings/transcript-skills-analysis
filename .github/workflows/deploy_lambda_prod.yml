@@ -1,0 +1,51 @@
+name: Deploy prod-transcript-skills-analysis
+
+# Only runs when triggered manually
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      S3_BUCKET: digicred-lambda-packages
+      S3_KEY: prod-transcript-skills-analysis.zip
+      LAMBDA_FUNCTION_NAME: prod-transcript-skills-analysis
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Setup AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_ACCESS_KEY_SECRET }}
+          aws-region: us-east-1
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Build deployment package
+        run: |
+          rm -rf lambda_build
+          mkdir lambda_build
+          pip install \
+            --platform manylinux2014_x86_64 \
+            --only-binary=:all: \
+            --target lambda_build \
+            -r requirements.txt
+          cp *.py lambda_build/
+          cd lambda_build
+          zip -r ../lambda_package.zip .
+          cd ..
+
+      - name: Upload to S3
+        run: |
+          aws s3 cp lambda_package.zip s3://$S3_BUCKET/$S3_KEY
+
+      - name: Update Lambda function
+        run: |
+          aws lambda update-function-code --function-name $LAMBDA_FUNCTION_NAME --s3-bucket $S3_BUCKET --s3-key $S3_KEY
