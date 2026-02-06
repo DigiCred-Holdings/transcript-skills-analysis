@@ -1,8 +1,6 @@
 import json
-import time
 import boto3
 import os
-import re
 
 s3_client = boto3.client('s3')
 bedrock_client = boto3.client("bedrock-runtime")
@@ -24,6 +22,7 @@ def load_skills_dataset():
 def find_relevant_courses(course_title_code_list, all_courses):    
     all_course_codes = [course["code"].upper() for course in all_courses if course["code"]]
     found_student_courses = []
+    overloaded_codes = []
     missing_codes = []
     for given_title, given_code in course_title_code_list:
         candidates = []
@@ -33,13 +32,13 @@ def find_relevant_courses(course_title_code_list, all_courses):
 
         if len(candidates) == 1:
             found_student_courses.append(candidates[0])
-        elif len(candidates):
-            print(f"{len(candidates)} candidates for course were found in the registry for code", given_code, given_title)
-            print(", ".join([course["code"] + ": " + course["name"] for course in candidates]))
-            missing_codes.append([given_title, given_code])
+        elif candidates:
+            overloaded_codes.append([given_title, given_code])
         else:
-            print(f"Course code was not found in the registry", given_code)
             missing_codes.append([given_title, given_code])
+
+    print(f"Warning: {len(overloaded_codes)} courses found multiple matches in the database")
+    print(f"Found multiple matches for the following courses in registry {overloaded_codes}")
 
     print(f"Warning: {len(missing_codes)} courses were not found in the database.")
     print(f"Could not find the following courses in registry: {missing_codes}")
@@ -86,7 +85,7 @@ def get_skills_of_interest(all_skills):
             max_count = skill_data["count"]
         
         skill_average = skill_data["sum_skill_level"] / len(skill_data["courses"])
-        skill_data["skill_level_average"] = skill_average
+        skill_data["skill_level_average"] = f"{skill_average:.2f}"
         if skill_average > max_average_level:
             max_level_skill = id
             max_average_level = skill_average
@@ -117,7 +116,6 @@ def invoke_bedrock(system_prompt, messages):
             "temperature": 0.6
         }
     )
-    print("Bedrock response: ", response)
     return response["output"]["message"]["content"][0]["text"]
 
 def add_future_pathways(skills_of_interest):
@@ -137,9 +135,12 @@ def add_future_pathways(skills_of_interest):
                 "text": skill["name"]
             }]
         }]
-        skill["pathways"] = invoke_bedrock(system_prompt, user_messages)
+        bedrock_response = invoke_bedrock(system_prompt, user_messages)
+        skill["pathways"] = bedrock_response
+        print(f"Bedrock pathways response for {skill["name"]}: {bedrock_response}")
 
 def llm_summary(skills_of_interest):
+    skills_string_list = ", ".join([skill["name"] for skill in skills_of_interest])
     system_prompt = [{
         "text": '''
             Write a summary to go at the end of a transcript skill analysis for a high school student.
@@ -156,11 +157,13 @@ def llm_summary(skills_of_interest):
     user_messages = [{
         "role": "user",
         "content": [{
-            "text": ", ".join([skill["name"] for skill in skills_of_interest])
+            "text": skills_string_list
         }]
     }]
     
-    return invoke_bedrock(system_prompt, user_messages)
+    bedrock_response = invoke_bedrock(system_prompt, user_messages)
+    print(f"Bedrock summary response for {skills_string_list}: {bedrock_response}")
+    return bedrock_response
 
 def lambda_handler(event, context):
     if type(event["body"]) is str:
@@ -177,8 +180,10 @@ def lambda_handler(event, context):
     if "coursesList" not in body:
         return {
             'statusCode': 400,
-            'body': 'Invalid input: coursesList and source are required.'
+            'body': 'Invalid input: coursesList is required.'
         }
+
+    print(f"Lambda started with input: {body}")
     
     course_skills_data = get_course_data(body["coursesList"])
 
@@ -206,4 +211,5 @@ def lambda_handler(event, context):
             "course_ids": analyzed_course_ids,
         }
     }
+    print(f"Lambda returning output: {response}")
     return response
